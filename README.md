@@ -51,6 +51,7 @@ Linux/Windows are not supported yet (PRs welcome if you wire the official CLI pa
 
 ```bash
 brew tap krewdev/tap
+brew trust krewdev/tap   # required on Homebrew 6+ for third-party taps
 brew install hubstaff-work-shell
 hs doctor
 ```
