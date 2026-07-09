@@ -1,5 +1,9 @@
 # hubstaff-work-shell
 
+[![CI](https://github.com/krewdev/hubstaff-work-shell/actions/workflows/ci.yml/badge.svg)](https://github.com/krewdev/hubstaff-work-shell/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#requirements)
+
 **Task-scoped control for the real [Hubstaff](https://hubstaff.com) desktop timer on macOS.**
 
 `hs` is a small open-source shell around Hubstaff’s official **HubstaffCLI**.  
@@ -189,15 +193,18 @@ rm -rf /path/to/hubstaff-work-shell
 ```bash
 git clone https://github.com/krewdev/hubstaff-work-shell.git
 cd hubstaff-work-shell
+make check          # shellcheck + smoke tests
 ./bin/hs help
 ./bin/hs doctor
 ```
 
-ShellCheck (optional):
+| Target | What it runs |
+|--------|----------------|
+| `make check` | ShellCheck + smoke tests |
+| `make smoke` | CLI works without Hubstaff.app |
+| `make install` | Install via `install.sh` |
 
-```bash
-shellcheck bin/hs
-```
+CI runs on every push/PR.
 
 ---
 
@@ -225,3 +232,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and PRs for clearer status p
 
 - [Hubstaff scripted control / CLI docs](https://support.hubstaff.com/what-is-scripted-control/)
 - Hubstaff desktop ships `HubstaffCLI`; this project is only a workflow wrapper around it.
+- **[privacy-kit](https://github.com/krewdev/privacy-kit)** — full local macOS privacy audits (`pk audit`)

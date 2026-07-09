@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1 — 2026-07-09
+
+- CI (ShellCheck + smoke tests), Makefile, issue/PR templates
+- Code of Conduct, EditorConfig
+- README badges and quality docs
+
 ## 0.1.0 — 2026-07-09
 
 - Initial public release
