@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2 — 2026-07-09
+
+- Homebrew tap install docs, social card, Security Advisories reporting
+- Release badge
+
 ## 0.1.1 — 2026-07-09
 
 - CI (ShellCheck + smoke tests), Makefile, issue/PR templates

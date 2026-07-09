@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f1410"/>
+      <stop offset="100%" style="stop-color:#1a2a1c"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <rect x="48" y="48" width="1184" height="544" rx="24" fill="none" stroke="#5dce7a" stroke-width="2" opacity="0.55"/>
+  <text x="96" y="200" font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="64" fill="#e8f5eb" font-weight="700">hubstaff-work-shell</text>
+  <text x="96" y="280" font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="30" fill="#9fe3b0">hs — real Hubstaff, only while you have a task</text>
+  <text x="96" y="380" font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="24" fill="#9aa89e">start task · stop + quit · no spoofing</text>
+  <text x="96" y="480" font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="22" fill="#6a7a70">MIT · github.com/krewdev/hubstaff-work-shell</text>
+</svg>

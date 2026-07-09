@@ -3,6 +3,11 @@
 [![CI](https://github.com/krewdev/hubstaff-work-shell/actions/workflows/ci.yml/badge.svg)](https://github.com/krewdev/hubstaff-work-shell/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#requirements)
+[![Release](https://img.shields.io/github/v/release/krewdev/hubstaff-work-shell)](https://github.com/krewdev/hubstaff-work-shell/releases)
+
+<p align="center">
+  <img src="docs/social-card.svg" alt="hubstaff-work-shell" width="640" />
+</p>
 
 **Task-scoped control for the real [Hubstaff](https://hubstaff.com) desktop timer on macOS.**
 
@@ -41,6 +46,14 @@ Linux/Windows are not supported yet (PRs welcome if you wire the official CLI pa
 ---
 
 ## Install
+
+### Homebrew (tap)
+
+```bash
+brew tap krewdev/tap
+brew install hubstaff-work-shell
+hs doctor
+```
 
 ### Option A — clone + install script
 

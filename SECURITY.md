@@ -1,32 +1,29 @@
 # Security Policy
 
+## Supported versions
+
+| Version | Supported |
+|---------|-----------|
+| 0.1.x   | Yes |
+
 ## What this project does
 
-`hs` is a local shell wrapper. It:
-
-- Invokes the official `HubstaffCLI` binary inside `Hubstaff.app`
-- May quit the Hubstaff process when you request stop/guard
-- Writes state under `~/.config/hubstaff-work/` (no secrets by design)
-
-It does **not** implement Hubstaff’s network protocol or store account passwords.
+`hs` is a local shell wrapper around the official **HubstaffCLI** inside Hubstaff.app. It does not implement Hubstaff’s network protocol or store passwords.
 
 ## Reporting a vulnerability
 
-If you find a security issue in **this repository’s scripts** (e.g. unsafe path handling, unexpected code execution):
+Use **GitHub Security Advisories** (private):
 
-1. Open a private report if the host supports it, or
-2. Open a GitHub issue without exploit details and ask for a secure contact channel.
+https://github.com/krewdev/hubstaff-work-shell/security/advisories/new
 
-Please do **not** file issues that request help spoofing Hubstaff or bypassing employer monitoring while the timer is on.
+Include `hs version`, macOS version, and reproduction steps.
 
-## Secrets and local data
+## Out of scope
 
-Never commit:
+- Spoofing Hubstaff activity, screenshots, or UI  
+- Circumventing organization policies while the timer is on  
+- Vulnerabilities solely in Hubstaff’s proprietary client  
 
-- Hubstaff tokens or `account.json` from `~/Library/Application Support/Hubstaff/`
-- Cloudflare / VPN / other credentials
-- Real org IDs if your org considers them sensitive (optional redaction in bug reports)
+## Secrets
 
-## Dependencies
-
-There are no third-party package dependencies. Review `bin/hs` and `install.sh` before installing.
+Never commit Hubstaff tokens from `~/Library/Application Support/Hubstaff/`.

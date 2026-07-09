@@ -8,7 +8,7 @@
 
 set -euo pipefail
 
-HS_VERSION="0.1.1"
+HS_VERSION="0.1.2"
 
 HUBSTAFF_APP="${HUBSTAFF_APP:-/Applications/Hubstaff.app}"
 CLI="${HUBSTAFF_CLI:-$HUBSTAFF_APP/Contents/MacOS/HubstaffCLI}"
