@@ -1,0 +1,21 @@
+# Local / editor
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+*.code-workspace
+
+# Local test config (never commit Hubstaff data)
+.config/
+hs.log
+state
+guard.pid
+
+# Secrets (safety net)
+**/account.json
+**/*token*
+**/*.pem
+**/*credentials*
+.env
+.env.*

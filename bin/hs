@@ -1,0 +1,345 @@
+#!/usr/bin/env bash
+# hs — Hubstaff Work Shell
+# Official Hubstaff desktop client + HubstaffCLI wrapper for task-scoped tracking.
+# https://github.com/krewdev/hubstaff-work-shell
+#
+# Not affiliated with Hubstaff / Netsoft Holdings.
+# Does not spoof Hubstaff. Requires the real app and "Scripted control".
+
+set -euo pipefail
+
+HS_VERSION="0.1.0"
+
+HUBSTAFF_APP="${HUBSTAFF_APP:-/Applications/Hubstaff.app}"
+CLI="${HUBSTAFF_CLI:-$HUBSTAFF_APP/Contents/MacOS/HubstaffCLI}"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hubstaff-work"
+STATE_FILE="$CONFIG_DIR/state"
+GUARD_PID_FILE="$CONFIG_DIR/guard.pid"
+LOG_FILE="$CONFIG_DIR/hs.log"
+
+# After stop, always quit the app so background client cannot collect.
+# Set HUBSTAFF_KEEP_OPEN=1 to leave app running after stop.
+KEEP_OPEN="${HUBSTAFF_KEEP_OPEN:-0}"
+
+# Guard: how often to check (seconds)
+GUARD_INTERVAL="${HUBSTAFF_GUARD_INTERVAL:-30}"
+
+mkdir -p "$CONFIG_DIR"
+
+log() {
+  printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG_FILE" >&2
+}
+
+die() {
+  printf 'hs: %s\n' "$*" >&2
+  exit 1
+}
+
+need_cli() {
+  [[ -x "$CLI" ]] || die "HubstaffCLI not found at $CLI"
+}
+
+app_running() {
+  pgrep -x Hubstaff >/dev/null 2>&1
+}
+
+open_app() {
+  if ! app_running; then
+    open -a "$HUBSTAFF_APP" || open "$HUBSTAFF_APP"
+    # wait for CLI socket
+    local i=0
+    while (( i < 40 )); do
+      if "$CLI" status >/dev/null 2>&1; then
+        return 0
+      fi
+      sleep 0.5
+      ((i++)) || true
+    done
+    log "warning: Hubstaff opened but CLI not ready yet (enable Scripted control?)"
+  fi
+}
+
+quit_app() {
+  if app_running; then
+    osascript -e 'tell application "Hubstaff" to quit' >/dev/null 2>&1 || true
+    sleep 1
+    if app_running; then
+      # Hubstaff is often an LSUIElement agent — kill cleanly if quit ignored
+      pkill -x Hubstaff 2>/dev/null || true
+      sleep 0.5
+    fi
+    if app_running; then
+      pkill -9 -x Hubstaff 2>/dev/null || true
+    fi
+    log "Hubstaff quit (no collection while app is closed)"
+  fi
+}
+
+cli() {
+  need_cli
+  # Prefer talking to already-running app; do not autostart unless we asked open_app.
+  "$CLI" "$@"
+}
+
+cli_or_start() {
+  need_cli
+  if ! app_running; then
+    open_app
+  fi
+  # --autostart as fallback if open failed to register
+  if ! "$CLI" status >/dev/null 2>&1; then
+    "$CLI" --autostart "$@"
+  else
+    "$CLI" "$@"
+  fi
+}
+
+cmd_status() {
+  need_cli
+  if ! app_running; then
+    echo "Hubstaff: not running (not collecting)"
+    return 0
+  fi
+  if ! out=$(cli status 2>&1); then
+    echo "Hubstaff: running, but CLI unavailable"
+    echo "  → Enable Preferences → Scripted control (Allow CLI Control)"
+    echo "  → $out"
+    return 1
+  fi
+  echo "$out"
+  # human summary if JSON-ish or key fields present
+  if echo "$out" | grep -qiE 'task|project|track|idle|stop'; then
+    :
+  fi
+}
+
+cmd_stop_full() {
+  need_cli
+  if app_running; then
+    cli stop 2>/dev/null || true
+    log "timer stopped"
+  fi
+  if [[ "$KEEP_OPEN" != "1" ]]; then
+    quit_app
+  else
+    log "timer stopped; app left open (HUBSTAFF_KEEP_OPEN=1)"
+  fi
+  printf 'stopped\n' >"$STATE_FILE"
+  echo "OK — timer off; Hubstaff not collecting."
+}
+
+cmd_pause() {
+  need_cli
+  app_running || die "Hubstaff is not running"
+  cli stop
+  printf 'paused\n' >"$STATE_FILE"
+  echo "OK — timer stopped (app still open). Run: hs stop  to quit fully."
+}
+
+cmd_start_task() {
+  local task_id="${1:-}"
+  [[ -n "$task_id" ]] || die "usage: hs start <task_id>"
+  need_cli
+  open_app
+  if ! cli_or_start start_task "$task_id"; then
+    die "failed to start task $task_id (Scripted control enabled? logged in?)"
+  fi
+  printf 'tracking task %s\n' "$task_id" >"$STATE_FILE"
+  log "started task $task_id"
+  echo "OK — tracking task $task_id. When done: hs stop"
+  cli status 2>/dev/null || true
+}
+
+cmd_start_project() {
+  local project_id="${1:-}"
+  [[ -n "$project_id" ]] || die "usage: hs start-project <project_id>"
+  echo "note: project-only tracking (no task). Prefer: hs start <task_id>" >&2
+  need_cli
+  open_app
+  cli_or_start start_project "$project_id"
+  printf 'tracking project %s\n' "$project_id" >"$STATE_FILE"
+  log "started project $project_id"
+  cli status 2>/dev/null || true
+}
+
+# Return 0 if status text indicates active tracking on a task.
+status_has_task() {
+  local s="$1"
+  # HubstaffCLI status formats vary by version; accept common patterns.
+  echo "$s" | grep -qiE 'task[_ ]?id[" ]*[:=][[:space:]]*[1-9]' && return 0
+  echo "$s" | grep -qiE '"task"[^}]*"[1-9]' && return 0
+  echo "$s" | grep -qiE 'tracking.*task|task:.*[a-zA-Z0-9]' && return 0
+  # if explicitly stopped / not tracking
+  echo "$s" | grep -qiE 'not tracking|stopped|is_tracking[" ]*[:=][[:space:]]*false|tracking[" ]*[:=][[:space:]]*false' && return 1
+  return 1
+}
+
+status_is_tracking() {
+  local s="$1"
+  echo "$s" | grep -qiE 'is_tracking[" ]*[:=][[:space:]]*true|tracking[" ]*[:=][[:space:]]*true|"tracking":\s*true' && return 0
+  echo "$s" | grep -qiE 'not tracking|stopped|is_tracking[" ]*[:=][[:space:]]*false' && return 1
+  # fallback: presence of active project id
+  echo "$s" | grep -qiE 'project[_ ]?id[" ]*[:=][[:space:]]*[1-9]' && return 0
+  return 1
+}
+
+cmd_guard() {
+  need_cli
+  if [[ -f "$GUARD_PID_FILE" ]] && kill -0 "$(cat "$GUARD_PID_FILE")" 2>/dev/null; then
+    die "guard already running (pid $(cat "$GUARD_PID_FILE")). Stop with: hs guard-stop"
+  fi
+
+  echo "$$" >"$GUARD_PID_FILE"
+  log "guard started (interval ${GUARD_INTERVAL}s) — will stop+quit if tracking without a task, or leave stopped app closed"
+  echo "Guard running. Ctrl+C or: hs guard-stop"
+  echo "Policy: only allow collection while timer is on a TASK; otherwise stop + quit Hubstaff."
+
+  cleanup() {
+    rm -f "$GUARD_PID_FILE"
+    log "guard stopped"
+  }
+  trap cleanup EXIT INT TERM
+
+  while true; do
+    if ! app_running; then
+      sleep "$GUARD_INTERVAL"
+      continue
+    fi
+
+    if ! st=$(cli status 2>/dev/null); then
+      # CLI denied or not ready — do not kill; user may need to enable control
+      sleep "$GUARD_INTERVAL"
+      continue
+    fi
+
+    if status_is_tracking "$st"; then
+      if status_has_task "$st"; then
+        : # OK — on a task
+      else
+        log "guard: tracking without task → stop + quit"
+        cli stop 2>/dev/null || true
+        quit_app
+      fi
+    else
+      # App open but not tracking → quit so it cannot collect
+      log "guard: app open, timer off → quit"
+      quit_app
+    fi
+
+    sleep "$GUARD_INTERVAL"
+  done
+}
+
+cmd_guard_stop() {
+  if [[ -f "$GUARD_PID_FILE" ]]; then
+    local pid
+    pid=$(cat "$GUARD_PID_FILE")
+    kill "$pid" 2>/dev/null || true
+    rm -f "$GUARD_PID_FILE"
+    echo "guard stop signalled (pid $pid)"
+  else
+    echo "guard not running"
+  fi
+}
+
+cmd_guard_bg() {
+  if [[ -f "$GUARD_PID_FILE" ]] && kill -0 "$(cat "$GUARD_PID_FILE")" 2>/dev/null; then
+    echo "guard already running (pid $(cat "$GUARD_PID_FILE"))"
+    return 0
+  fi
+  nohup "$0" guard >>"$LOG_FILE" 2>&1 &
+  echo "guard started in background (pid $!). Log: $LOG_FILE"
+}
+
+cmd_doctor() {
+  echo "hs version: $HS_VERSION"
+  echo "Hubstaff app: $HUBSTAFF_APP"
+  [[ -d "$HUBSTAFF_APP" ]] && echo "  present" || echo "  MISSING"
+  echo "CLI: $CLI"
+  [[ -x "$CLI" ]] && echo "  executable" || echo "  MISSING"
+  echo "Running: $(app_running && echo yes || echo no)"
+  echo "Autostart preference: $(python3 -c "import json,pathlib;p=pathlib.Path.home()/ 'Library/Application Support/Hubstaff/settings.json';
+d=json.loads(p.read_text()) if p.exists() else {};print(d.get('client',{}).get('preferences',{}).get('autostart','?'))" 2>/dev/null)"
+  echo "Login items: remove Hubstaff if listed (System Settings → General → Login Items)"
+  if app_running; then
+    if cli status 2>/dev/null; then
+      echo "CLI: OK (Scripted control appears enabled)"
+    else
+      echo "CLI: FAILED — open Hubstaff → Preferences → enable Scripted control / Allow CLI Control"
+    fi
+  else
+    echo "CLI: app not running (start with: hs open, then enable Scripted control once)"
+  fi
+  echo "Config: $CONFIG_DIR"
+  echo "Log: $LOG_FILE"
+}
+
+cmd_help() {
+  cat <<EOF
+hs ${HS_VERSION} — Hubstaff Work Shell (official client + CLI only)
+
+Only collect while a TASK timer is running. hs stop quits Hubstaff so it
+cannot take screenshots / apps / URLs when you have no tasks.
+
+Commands:
+  hs status                 tracking status
+  hs orgs                   list organizations
+  hs projects [org_id]      list projects
+  hs tasks <project_id>     list tasks
+  hs start <task_id>        start timer on a task
+  hs start-project <id>     start project timer (prefer task)
+  hs stop                   stop timer + quit Hubstaff
+  hs pause                  stop timer, leave app open
+  hs resume                 resume last project/task
+  hs open                   open UI without starting timer
+  hs quit                   quit app only
+  hs guard                  foreground: stop+quit if not on a task
+  hs guard-bg               same, in background
+  hs guard-stop             stop background guard
+  hs doctor                 check install / CLI / login
+  hs version                print version
+
+Once:
+  1. Open Hubstaff, log in
+  2. Preferences → enable Scripted control (Allow CLI Control)
+  3. hs stop
+
+Daily:
+  hs projects → hs tasks <id> → hs start <task_id>
+  when done / no tasks: hs stop
+  optional: hs guard-bg
+
+Env:
+  HUBSTAFF_KEEP_OPEN=1        leave app open after hs stop
+  HUBSTAFF_GUARD_INTERVAL=30  guard poll seconds
+  HUBSTAFF_APP                path to Hubstaff.app
+  HUBSTAFF_CLI                path to HubstaffCLI binary
+EOF
+}
+
+main() {
+  local cmd="${1:-help}"
+  shift || true
+  case "$cmd" in
+    help|-h|--help) cmd_help ;;
+    version|-V|--version) echo "hs $HS_VERSION" ;;
+    status|st) cmd_status ;;
+    orgs|organizations) cli_or_start organizations "$@" ;;
+    projects|proj) cli_or_start projects "$@" ;;
+    tasks) [[ -n "${1:-}" ]] || die "usage: hs tasks <project_id>"; cli_or_start tasks "$@" ;;
+    start|start-task|start_task) cmd_start_task "$@" ;;
+    start-project|start_project) cmd_start_project "$@" ;;
+    resume) open_app; cli_or_start resume; cli status 2>/dev/null || true ;;
+    stop|off|done) cmd_stop_full ;;
+    pause) cmd_pause ;;
+    open|ui) open_app; echo "Hubstaff open (timer not started). Start a task with: hs start <task_id>" ;;
+    quit|kill) quit_app; echo "Hubstaff quit." ;;
+    guard) cmd_guard ;;
+    guard-bg|guard_bg) cmd_guard_bg ;;
+    guard-stop|guard_stop) cmd_guard_stop ;;
+    doctor|check) cmd_doctor ;;
+    *) die "unknown command: $cmd (try: hs help)" ;;
+  esac
+}
+
+main "$@"
